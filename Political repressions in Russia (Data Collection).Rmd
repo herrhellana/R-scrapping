@@ -1,0 +1,306 @@
+---
+title: "Data Collection Project: Russian repressive politics"
+author: "Gergel Anastasia, 2019"
+output: 
+  html_document:
+    latex_engine: xelatex
+header-includes: 
+- \usepackage[T2A]{fontenc}
+- \usepackage[utf8]{inputenc}
+- \usepackage[russian]{babel}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(comment=NA, message=FALSE, warning=FALSE)
+```
+
+## Codebook for the Criminal Code articles (with charges): 
+
+- __282.1__: incitement of hatred or abasement of human dignity. 
+- __282-2.1__: incitement of hatred or abasement of human dignity with force (300 000 - 600 000 RUB penalty or compulsory labour for 2-5 years with disqualification to hold certain positions or to practise certain professions for up to 3 years or 3-6 years imprisonment). 
+- __205-5.2__: terror incident. Establishment or maintenance of a terrorist organization (15-20 years imprisonment with a penalty up to 1 000 000 RUB and with restraint for 1-2 years or life imprisonment)
+- __205-5.1__: terror incident. Participation in a terrorist organization (10-20 years imprisonment with a penalty up to 500 000 RUB). 
+- __205-1.1__: assisting or recruitment in a terrorist organization (5-15 years imprisonment with a penalty up to). 
+- __278__: violent upheaval or violent power retention (12-20 years imprisonment with restraint for 2 years).
+
+Download a region-level dataset containing non-legal anti-extremist sentences for 2007-2018. 
+
+# SOVA: non-legal anti-extremism in Russia
+Russian analytical center SOVA investigates human rights abuses and political extremism in contemporary Russia. They provide several datasets on hatred-related crimes and on violation of citizens' rights by the government. 
+
+The focus of the data I srape is __"non-legal anti-extremism"__ defined as the government's or NGOs' actions declared to be against political radicalism but eventually restricting civil, political, and human rights.  
+
+```{r}
+library(rvest)
+library(dplyr)
+library(knitr)
+# Sys.setlocale("LC_CTYPE", "ru_RU.UTF-8")
+
+sentence_table <- read_html("https://www.sova-center.ru/database/sentences/?legality_sentence=576&xfield=region&yfield=y&nr=сonviction&show=1") %>% html_table(fill = TRUE)
+
+# the 7th element contains the table needed
+sentence_table <- sentence_table[[7]] 
+sentence_table <- sentence_table[-1] # delete the non-informative column
+
+names(sentence_table)[1] <- "Region" # rename the first column
+names(sentence_table)[14] <- "Total" # rename the last one
+
+
+# if needed, one can translate 57 regions to English
+
+SomeRussianRegions <- c("Moscow", "St. Petersburg", "Altai Krai", 
+                        "Arkhangelsk Oblast", "Astrakhan Oblast", 
+                        "Belgorod Oblast", "Vladimir Oblast", 
+                        "Volgograd Oblast", "Vologda Oblast",
+                        "Zabaykalsky Krai", "Ivanovo Oblast", "Kabardino-Balkaria", 
+                        "Kaliningrad Oblast", "Kaluga Oblast", "Kemerovo Oblast", 
+                        "Kirov Oblast", "Krasnodar Krai", "Krasnoyarsk Krai", 
+                        "Kurgan Oblast", "Leningrad Oblast", "Moscow Oblast", 
+                        "Murmansk Oblast", "Nizhny Novgorod Oblast", "Novgorod Oblast", 
+                        "Novosibirsk Oblast", "Omsk Oblast", "Orenburg Oblast", "Oryol Oblast", 
+                        "Perm Krai", "Primorsky Krai", "Adygea", "Altai", "Bashkortostan", 
+                        "Buryatia", "Dagestan", "Ingushetia", "Karelia", "Komi", "Crimea", "Mari El", 
+                        "Tatarstan", "Khakassia", "Rostov Oblast", "Samara Oblast", "Saratov Oblast", 
+                        "Sverdlovsk Oblast", "Sevastopol", "Tver Oblast", "Tyumen Oblast", 
+                        "Udmurtia", "Ulyanovsk Oblast", "Khabarovsk Krai", "Yugra", 
+                        "Chelyabinsk Oblas", "Chuvashia", "Yaroslavl Oblast", "Total")
+
+sentence_table[,1] <- SomeRussianRegions
+head(sentence_table) # take a look
+
+# write.csv(file = "/Users/herrhellana/Dropbox/_Political Violence Reseach/Term paper 2019 Ongoing/Data/sentence_table.csv", x = sentence_table)
+```
+
+Note that that data contains only 55 Russian regions out of 85 (may be either missing values or non-legal anti-extremism free regions). 
+
+```{r}
+# see in which regions non-legal anti-extremist sentences are common
+library(ggplot2)
+ggplot(data = sentence_table[1:52, ], aes(y = Total, x = as.factor(Region))) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=6)) + 
+  geom_bar(stat = "identity", fill = "tomato") + 
+  labs(x = "Regions", y = "Number of non-legal sentences", 
+       title = "Distribution of non-legal sentences in Russian regions for 2007-2018")
+
+# sort by the number of sentences 
+# print seven regions with the greatest number of sentences 
+# and the number of sentences in these regions (for 2007-2018)
+for (i in sort(sentence_table$Total[1:52], decreasing = TRUE)[1:7]){
+  print(c(sentence_table[(sentence_table$Total == i), "Region"], i), quote=FALSE)
+}
+```
+
+Most of anti-extremist sentences on non-legal base in Tatarstan and Bashkortostan adress the freedom of religion (e.g. Jehovah's Witnesses has been designated as an extremist organization in 2017), most of sentences in Moscow and St. Pete violate the freedom of expression, (e.g. sentences for "anti-extremist" reposts in social media, such as pics of Putin with nazi symbols, political or religious jokes, sarcastic texts or audio that criticize the government).
+
+```{r}
+barplot(rev(unlist(sentence_table[57, 2:13])), col = heat.colors(20), 
+        main = "Distribution of registered non-legal sentences by year", width = 0.5, cex.names=0.8)
+```
+
+As we see there was an increase in non-legal sentences for anti-extremist Criminal Code articles after the Crimea annexation. 
+
+Data for types of charges. 
+```{r}
+sentence_charges <- read_html("https://www.sova-center.ru/database/sentences/?legality_sentence=576&xfield=articles&yfield=y&nr=сonviction&show=1") %>% html_table(fill = TRUE)
+
+# the 7th element contains the table needed
+sentence_charges <- sentence_charges[[7]] 
+sentence_charges <- sentence_charges[-1] # delete the 1st column (non-informative)
+
+names(sentence_charges)[1] <- "Charges" # rename the first column
+names(sentence_charges)[14] <- "Total" # rename the last one
+
+head(sentence_charges) # take a look
+
+# write.csv(file = "/Users/herrhellana/Dropbox/_Political Violence Reseach/Term paper 2019 Ongoing/Data/sentence_charges.csv", x = sentence_charges)
+```
+
+Visualize the graph for those articles in the Criminal Code ("уголовные статьи") that are commonly used for political prosecutions. 
+
+```{r}
+ggplot(data = sentence_charges[1:52, ], aes(y = Total, x = as.factor(Charges))) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, size=6)) + 
+  geom_bar(stat = "identity", fill = "lightslateblue") + 
+  labs(x = "Charges", y = "Number of arrested by an article", 
+       title = "Distribution of repressive articles in Russian regions for 2007-2018")
+
+# sort by the number of arrested by an article
+# print six the most common articles
+# and the number or sentences on the basis of these articles (2007-2018)
+for (i in sort(sentence_charges$Total[1:52], decreasing = TRUE)[1:6]){
+  print(c(sentence_charges[(sentence_charges$Total == i), "Charges"], i))
+}
+```
+
+
+
+# PolitPressing.org: political prosecutions in Russia
+
+PolitPressing.org provides data on political repression definied as political prosecutions by the government in Russia. PolitPressing.org aggregates data collected and analyzed by several human rights organizations, including Amnesty International, SOVA, the Memorial Center. 
+
+```{r}
+library(httr)
+PolitPress <- GET("https://up.d4s.io/openapi/persons?page=1&per_page=1000&sort_by=started&order=desc") %>% content()
+
+# need the second node only
+PolitPress <- PolitPress[[2]]
+
+# create null columns
+persons <- rep(NA, length(PolitPress))
+description <- rep(NA, length(PolitPress))
+
+
+for (i in 1:length(PolitPress)){
+  persons[i] <- PolitPress[[i]]$name
+  description[i] <- PolitPress[[i]]$brief
+}
+
+# (for internal errors checking)
+# kable(PolitPress[[442]]$name) # depends on library 'knitr'
+# print(PolitPress[[442]]$region, encoding = "UTF-8") 
+
+# --------------------------------------------------- #
+# -------------------- SENTENCES -------------------- #
+articles <- rep(NA, length(PolitPress))
+
+for (i in 1:length(PolitPress)){
+  if (length(PolitPress[[i]]$articles) > 0){
+   articles[i] <- paste(unlist(PolitPress[[i]]$articles), collapse = " / ")
+  }
+  else {
+    articles[i] <- 0
+  }
+}
+
+# ------------------- PROFESSIONS ------------------- #
+profession <- rep(NA, length(PolitPress))
+for (i in 1:length(PolitPress)){
+  if (length(PolitPress[[i]]$profession) > 0){
+   profession[i] <- paste(unlist(PolitPress[[i]]$profession), collapse = " / ")
+  }
+  else {
+    profession[i] <- 0
+  }
+}
+
+# ------------------- REGIONS ------------------ #
+region <- rep(NA, length(PolitPress))
+for (i in 1:length(PolitPress)){
+  if (length(PolitPress[[i]]$region) > 0){
+   region[i] <- paste(unlist(PolitPress[[i]]$region), collapse = " / ")
+  }
+  else {
+    region[i] <- 0
+  }
+}
+
+# ---------------- ESTIMATED BY --------------- #
+estimation <- rep(NA, length(PolitPress))
+for (i in 1:length(PolitPress)){
+  if (length(PolitPress[[i]]$estimation) > 0){
+   estimation[i] <- paste(unlist(PolitPress[[i]]$estimation), collapse = " / ")
+  }
+  else {
+    estimation[i] <- 0
+  }
+}
+
+# ------------------ SUBJECT ----------------- #
+subject <- rep(NA, length(PolitPress))
+for (i in 1:length(PolitPress)){
+  if (length(PolitPress[[i]]$subject) > 0){
+   subject[i] <- paste(unlist(PolitPress[[i]]$subject), collapse = " / ")
+  }
+  else {
+    subject[i] <- 0
+  }
+}
+
+
+# creating a DATASET
+PolitPressData <- data.frame(persons, description, articles, profession, region, estimation, subject)
+
+# ----------------------------------------- #
+# ------------------ YEARS ---------------- #
+# ----------------------------------------- #
+# append year columns to the dataframe
+for (i in 2011:2018){
+  PolitPressData[as.character(i)] <- rep(NA, length(PolitPressData[,1]))
+}
+
+# if a person was prosecuted in a year, insert 1
+for (i in 1:length(PolitPress)){
+  PolitPressData[i, c(as.character(PolitPress[[i]]$years))] <- 1
+}
+
+
+# check for Petr Pavlensky:
+as.character(PolitPress[[which(PolitPressData[, 1] == 'Петр Павленский')]]$years) 
+PolitPressData[which(PolitPressData[, 1] == 'Петр Павленский'), 8:16]
+
+# take a look on the results
+print(head(PolitPressData), encoding = "UTF-8")
+```
+
+
+I've scrapped the basic information on different prosecutions: names of prosecuted, brief description of their cases, Criminal Code articles, professions of prosecuted, locations, data sources, which civil, human or political rights were abused, and years of prosecutions. 
+```{r}
+Total <- rep(NA, 9)
+for (i in 1:9){
+  Total[i] <- sum(PolitPressData[, as.character(i+2010)], na.rm = TRUE)
+  names(Total)[i] <- as.character(i+2010)
+}
+
+
+barplot(Total, col = heat.colors(18), main = "Number of prosecutions under investigation by year", 
+        width = 0.5, cex.names=0.8)
+```
+
+Gradual increase in the number of open prosecutions after 2012. Since each year may contain prosecutions started in previous years, it is reasonable to check separetely those "fresh" prosecutions that started in a specific year. 
+
+```{r}
+start_year <- rep(NA, length(PolitPressData[, 1]))
+
+for (i in 1:length(PolitPressData[, 1])){
+    start_year[i] <- colnames(PolitPressData)[which(PolitPressData[i, ] == 1)][1] 
+}
+PolitPressData$start_year <- as.numeric(start_year) # append
+
+Total_started <- rep(NA, length(2011:2019))
+for (i in 1:9){
+  Total_started[i] <- length(which(PolitPressData$start_year == 2010 + i)) # count
+}
+names(Total_started) <- c(2011:2019)
+
+
+barplot(Total_started, col = heat.colors(18), 
+        main = "Number of new prosecutions started in a specific year", 
+        width = 0.5, cex.names=0.8)
+```
+
+A steady wave-like increase in newly opened cases is still present. 
+
+
+Check the most "repressed" regions. P.S. not efficient since some of the variables include more than one region. Will deal with this issue lately. 
+```{r}
+head(sort(table(PolitPressData$region), decreasing = TRUE))
+```
+
+For Apr 2019: Moscow, Tatarstan, Crimea, Bashkortostan, St Pets. 
+
+
+
+We can next visualize a word cloud of prosecutions decriptions. 
+```{r}
+library(quanteda)
+wild_dfm <- dfm(corpus(as.character(PolitPressData$description)), tolower=TRUE, remove_punct = TRUE, remove_url = TRUE, remove = c(stopwords(language = 'ru'), "года", "годам", "приговорен"), stem = T)
+
+wild_dfm <- dfm_trim(wild_dfm, min_docfreq=3)
+textplot_wordcloud(wild_dfm, rotation=0, min_size=.75, max_size=3, max_words=50)
+
+# write.csv(file = "/Users/herrhellana/Dropbox/_Political Violence Reseach/Term paper 2019 Ongoing/Data/PolitPressData.csv", x = PolitPressData)
+```
+
+The most frequant words in the word could are: accused, unreasonably, terrorist, labour camp, extremism, organization, pan-Islamist political organization "Hizb ut-Tahrir", hatred, Jehovah's Witnesses. 
