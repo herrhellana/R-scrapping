@@ -1,0 +1,184 @@
+---
+title: "Challenge 7"
+author: Anastasia Gergel
+date: August 2nd, 2018
+output: 
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, message=FALSE, comment=NA, warning=FALSE, eval = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Turning to the REST API, collect the 2,000 most recent tweets from a Twitter account that you find relevant.
+
+```{r, message=FALSE, comment=NA, warning=FALSE}
+load("./my_oauth.dms") # loading keys
+
+library(tweetscores)
+library(streamR)
+
+# connecting to the A. Navalny's twitter account with keys
+navalny <- getUsersBatch(screen_names="navalny", 
+                       oauth=my_oauth)
+
+# collecting his tweets
+getTimeline(filename = "./navalny.json", screen_name="navalny", n=2000, oauth=my_oauth)
+```
+
+Using the code we just used, look at the most popular hashtags used by that account. What do you learn?
+
+```{r,  message=FALSE, comment=NA, warning=FALSE}
+library(stringr)
+tweets <- parseTweets("./navalny.json") # parsing tweets
+
+# extracting all hastags from the tweets
+ht <- str_extract_all(tweets$text, "#(\\d|\\w)+")
+# the function returns a list of characters, 
+# so we can unlist `ht` to get a vector to simplify further work with this variable
+ht <- unlist(ht)
+head(sort(table(ht), decreasing = TRUE)) # return the most popular hashtags
+```
+
+Navalny is anti-Putinist (#ОнНамНеЦарь = #HeIsNotTheTsarForUs) and loves cacti (#Кактус = #Cactus). CactusTv (КактусТВ) is actually his live show in YouTube, Navalny uses the Cactus hashtag for people sending him questions in social medias. Simple. 
+
+Produce a word cloud of this set of tweets to look at what are the words most frequently used by this user.
+
+```{r, message=FALSE, comment=NA, warning=FALSE, eval = FALSE}
+library(quanteda)
+
+# remove all trash such as punctuation, linking words, retweet mentions and urls
+Ndfm <- dfm(tweets$text, remove_punct=TRUE, remove_url=TRUE, remove = c(stopwords("russian"), "RT", "это"))
+
+
+topfeatures(Ndfm, n = 30) # just print top words          
+# and create a cloud
+textplot_wordcloud(Ndfm, rotation=0, min_size=1, max_size=5, max_words=50, color = c("orange", "mediumblue", "red")) 
+```
+
+Estimate the political ideology of this user.
+
+```{r, message=FALSE, comment=NA, warning=FALSE, eval = FALSE}
+library(tweetscores)
+
+friends <- getFriends("navalny", oauth=my_oauth) # getting Navalny's subsriptions
+# estimanting the ideological orientation 
+# adjusting to the political ideology of Navalny's elite subsriptions
+(theta <- estimateIdeology2("navalny", friends, verbose=FALSE))
+```
+
+True, he's right-wing. That's understandable because Russian liberal anti-putinist opposition is mostly right-wing from the reference point of American ideological spectrum: their agenda concerns first of all the protection of rights, anti-corruption activities instead of proclamations towards the creation of fully free market and minimalist government. Moreover, Navalny is a nationalist, that's common fact (e.g. he participated in the Russian march in 2006 and later, in 2010s, supported the idea of "new political nationalism" that he regarded as progress in the liberal idea). 
+
+
+Then, find the five screen names most frequently mentioned by this user and estimate their political ideology too. Are they all similar? (Note that this method will only work for US-based accounts that do not follow a lot of other users.)
+
+```{r, message=FALSE, comment=NA, warning=FALSE, eval = FALSE}
+# extract tweets that contain mentions of other users
+sn <- str_extract_all(tweets$text, "@(\\d|\\w)+") 
+sn <- unlist(sn)
+
+mentioned <- sort(table(sn), decreasing = TRUE)
+mentioned[1:5] # get the top 5 screen names most frequently mentioned
+
+# since the first 4 acctounts do not follow the elites, 
+# try to figure out the ideological orientaion of 'mediazzzona'
+PussyRiotFriends <- getFriends("mediazzzona", oauth=my_oauth)
+(theta <- estimateIdeology2("mediazzzona", PussyRiotFriends, verbose=FALSE))
+```
+
+True, that's a right-wing media founded by Russian activists Tolokonnikova and Alyokhina. 
+
+Download the followers of that account (if the account has more than 5K-10K followers, choose another one that has a number below that limit.) Take a small random sample of followers (maybe 10-20) and run the botometer. What proportion of followers do you estimate to be bots?
+```{r, eval=FALSE, cache = TRUE, message=FALSE, comment=NA, warning=FALSE, eval = FALSE}
+# saving the followers of "mediazzzona"
+PussyRiotFollowers <- getFollowers("mediazzzona", oauth = my_oauth) 
+
+set.seed(123)
+RandomFollowers <- sample(PussyRiotFollowers, size = 20) # saving the ids of randomly choosed followers 
+
+# saving info about users
+huh <- getUsers(ids = RandomFollowers, my_oauth) 
+RandomSN <- rep(NA, length(huh)) # creating a null vector
+
+# save to this vector screen names of mediazzzona's followers
+for (i in 1:length(huh)){
+  RandomSN[i] <- huh[[i]]$screen_name
+}
+```
+
+
+
+
+
+
+
+
+```{r, eval = FALSE, cache = TRUE, message=FALSE, comment=NA, warning=FALSE, eval = FALSE}
+library(RJSONIO)
+library(httr)
+
+# adapted from the botcheck package by @marsha5814
+botometer = function(user, my_oauth, mashape_key, verbose=TRUE) {
+  
+  # creating OAuth token
+  myapp = oauth_app("twitter", key=my_oauth$consumer_key, 
+                    secret=my_oauth$consumer_secret)
+  sig = sign_oauth1.0(myapp, token=my_oauth$access_token,
+                    token_secret=my_oauth$access_token_secret)
+  
+  users_url = "https://api.twitter.com/1.1/users/show.json?screen_name="
+  statuses_url = "https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name="
+  search_url = "https://api.twitter.com/1.1/search/tweets.json?q=%40"
+  opts = "&count=200"
+  
+  # API call to get user
+  if (verbose) message("Downloading user profile...")
+  userdata = GET(paste0(users_url,user,opts), sig)
+  
+  # API call to get tweets
+  if (verbose) message("Downloading user tweets...")
+  tweets = GET(paste0(statuses_url,user,opts), sig)
+  
+  # API call to get mentions
+  if (verbose) message("Downloading user mentions...")
+  mentions = GET(paste0(search_url,user,opts), sig)
+  
+  
+  # Put everything in a list
+  body = list(
+    timeline = content(tweets, type="application/json"),
+    mentions = content(mentions, type="application/json"),
+    user = content(userdata, type="application/json")
+  )
+  
+  # Convert to JSON
+  body_json = RJSONIO::toJSON(body, auto_unbox = T, pretty = T)
+  
+  # Make the API request
+  if (verbose) message("Checking Botometer scores...")
+  result = POST("https://osome-botometer.p.mashape.com/2/check_account",
+                 encode="json",
+                 add_headers(`X-Mashape-Key`=mashape_key),
+                 body=body_json)
+  
+  # Parse result
+  result = content(result, as = "parsed")
+  
+  # Return "English" score
+  return(result)
+}
+
+# creating a null object where I'll store all the results for accounts
+results <- rep(NA, length(RandomSN))
+
+# looping over mediazzzona followers and saving the info
+for (i in 1:length(RandomSN)){
+  results[i] <- botometer(RandomSN[i], my_oauth = my_oauth, mashape_key = 'Ujq7AAd3igmshqCBvI1LWbz0J8Hlp1hvVOYjsnMOx8z6bg4U68')
+}
+
+str(results)
+```
+
+We see that only 2 of 20 followers (10%) of mediazzzona are real people. 
